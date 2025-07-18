@@ -12,17 +12,10 @@ BPF_SOURCE_FILE = "fault_injection.c"
 
 # defines the probe point corresponding to the fault injection function.
 fn_table = {
-    "DmgChangeWearNormalDay": ("DmgChangeWearNormalDay", "data mgr get various wear to predicte disk life."),
-    "DmgChangeWear90Day": ("DmgChangeWear90Day", "data mgr get various wear to predicte disk life."),
-    "DmgChangeWear30Day": ("DmgChangeWear30Day", "data mgr get various wear to predicte disk life."),
-    "DmgChangeWear1Day": ("DmgChangeWear1Day", "data mgr get various wear to predicte disk life."),
-    "DmgChangeCheckWhitelistTrue": ("DmgChangeCheckWhitelistTrue", "data mgr check whitelist."),
-    "DmgChangeCheckWhitelistFalse": ("DmgChangeCheckWhitelistFalse", "data mgr check whitelist."),
-    "DmgChangeCheckWhitelistCacheTrue": ("DmgChangeCheckWhitelistCacheTrue", "data mgr check whitelist cache."),
-    "DmgChangeCheckWhitelistCacheFalse": ("DmgChangeCheckWhitelistCacheFalse", "data mgr check whitelist cache."),
-    "DcmReturnLinkErrEinal": ("DcmReturnLinkErrEinal", "data collect mgr meet link err when getting data from agent."),
-    "DcmReturnLinkErrEpipe": ("DcmReturnLinkErrEpipe", "data collect mgr meet link err when getting data from agent."),
-    "DcmReturnLinkErrEnosys": ("DcmReturnLinkErrEnosys", "data collect mgr meet link err when getting data from agent."),
+    "DmgChangeWear": ("DmgChangeWear", "data mgr get various wear to predicte disk life."),
+    "DmgChangeCheckWhitelist": ("DmgChangeCheckWhitelistTrue", "data mgr check whitelist."),
+    "DmgChangeCheckWhitelistCache": ("DmgChangeCheckWhitelistCacheTrue", "data mgr check whitelist cache."),
+    "DcmReturnLinkErr": ("DcmReturnLinkErr", "data collect mgr meet link err when getting data from agent."),
     "DrmReturnErr": ("DrmReturnErr", "drm get health info failed."),
     "CliReturnTimeOut30S": ("CliReturnTimeOut30S", "cli query info failed."),
     "CliReturnTimeOut90S": ("CliReturnTimeOut90S", "cli query info failed."),
@@ -46,6 +39,15 @@ fn_table = {
     "DrmDiskDiagUpdateDiagStatusFail": ("DrmDiskDiagUpdateDiagStatusFail", "drm disk diagnose update diag status failed"),
     "DrmDiskDiagGetDiagInfoFail": ("DrmDiskDiagGetDiagInfoFail", "drm disk diagnose get diag info failed"),
     "DrmDiskDiagFormatInfoFail": ("DrmDiskDiagFormatInfoFail", "drm disk diagnose format info failed"),
+    "DcaGetSataHddDhaInfo": ("DcaGetSataHddDhaInfo", "dca get sata hdd dha info"),
+    "DmgGetDhaInfoFail": ("DmgGetDhaInfoFail", "data mgr get dha info failed"),
+    "DrmSetDiskDiagMonthLifeCount": ("DrmSetDiskDiagMonthLifeCount", "drm set disk diag month and life count"),
+    "DrmSmartTpSkipFeatureIdHook": ("DrmSmartTpSkipFeatureIdHook", "-u featureId :  Drm skip feature id process"),
+    "DrmSlowDiskDetectSkipUpdateDiskPerfTp": ("DrmSlowDiskDetectSkipUpdateDiskPerfTp", "drm slow disk skip update disk perf"),
+    "DrmSlowDiskDetectGetIostatFailTp": ("DrmSlowDiskDetectGetIostatFailTp", "drm slow disk get disk iostat fail"),
+    "DrmDprDiskInPrefail": ("DrmDprDiskInPrefail", "drm dpr fail for disk in"),
+    "DhasTriggerIoerr": ("DhasTriggerIoerr", "Inject IO error event for DHA. Params: diskId,opcode,protocol,senseKey,senseCode"),
+    "DrmDprSetNvmeEntrysPrefail": ("DrmDprSetNvmeEntrysPrefail", "Set NVMe prefail by diskId. Params: diskId1,diskId2,... (optional)")
 }
 
 
