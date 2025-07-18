@@ -16,143 +16,85 @@
  * =================================================================
  */
 
-int DmgChangeWearNormalDay(struct pt_regs *ctx) {
+/**
+ * @brief DmgChangeWear 的注入处理函数 (合并版本).
+ * 接收3个参数, 分别为: &wearPercentage, &wearType, &wearValue
+ * 通过 -p val1,val2,val3 参数注入指定的整数值。
+ * 例如:
+ * -p 10,0,3000      (模拟 NormalDay)
+ * -p 90,0,17270      (模拟 90Day)
+ * -p 90,0,5390       (模拟 30Day)
+ * -p 99,0,1970       (模拟 1Day)
+ */
+int DmgChangeWear(struct pt_regs *ctx) {
+#ifdef PARAMS_DmgChangeWear
+    bpf_trace_printk("Probe DmgChangeWear: Fired.\\n");
+
+    // --- 1. 在 eBPF 中解析字符串参数 ---
+    char params[] = PARAMS_DmgChangeWear;
+    long values[3] = {0}; // 存储解析出的三个整数
+    int param_idx = 0;
+
+    // BPF 验证器友好的字符串解析循环
+    #pragma unroll
+    for (int i = 0; i < sizeof(params); i++) {
+        char c = params[i];
+        if (c == '\0') break;
+        if (c == ',') {
+            param_idx++;
+            if (param_idx >= 3) break;
+        } else if (c >= '0' && c <= '9') {
+            if (param_idx < 3) {
+                values[param_idx] = values[param_idx] * 10 + (c - '0');
+            }
+        }
+    }
+
+    // 检查是否成功解析出3个参数
+    if (param_idx != 2) {
+        bpf_trace_printk("DmgChangeWear Error: Expected 3 params, but parsed %d. Input: %s\\n",
+                         param_idx + 1, params);
+        return 0;
+    }
+
+    // --- 2. 依次修改探针的三个参数 ---
     void *ptr = NULL;
-    int original_val, verified_val, new_val;
+    int original_val, verified_val;
+    int new_val;
 
-    bpf_trace_printk("Probe DmgChangeWearNormalDay: Fired.\\n");
-
+    // 修改第一个参数
     bpf_usdt_readarg(1, ctx, &ptr);
     if (ptr) {
+        new_val = (int)values[0];
         bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 10;
         bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
         bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
         bpf_trace_printk("Arg1: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
     }
 
+    // 修改第二个参数
     bpf_usdt_readarg(2, ctx, &ptr);
     if (ptr) {
+        new_val = (int)values[1];
         bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 0;
         bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
         bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
         bpf_trace_printk("Arg2: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
     }
 
+    // 修改第三个参数
     bpf_usdt_readarg(3, ctx, &ptr);
     if (ptr) {
+        new_val = (int)values[2];
         bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 3000;
         bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
         bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
         bpf_trace_printk("Arg3: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
     }
-    return 0;
-}
 
-int DmgChangeWear90Day(struct pt_regs *ctx) {
-    void *ptr = NULL;
-    int original_val, verified_val, new_val;
-
-    bpf_trace_printk("Probe DmgChangeWear90Day: Fired.\\n");
-
-    bpf_usdt_readarg(1, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 90;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg1: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-
-    bpf_usdt_readarg(2, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 0;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg2: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-
-    bpf_usdt_readarg(3, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 17270;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg3: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-    return 0;
-}
-
-int DmgChangeWear30Day(struct pt_regs *ctx) {
-    void *ptr = NULL;
-    int original_val, verified_val, new_val;
-
-    bpf_trace_printk("Probe DmgChangeWear30Day: Fired.\\n");
-
-    bpf_usdt_readarg(1, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 90;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg1: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-
-    bpf_usdt_readarg(2, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 0;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg2: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-
-    bpf_usdt_readarg(3, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 5390;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg3: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-    return 0;
-}
-
-int DmgChangeWear1Day(struct pt_regs *ctx) {
-    void *ptr = NULL;
-    int original_val, verified_val, new_val;
-
-    bpf_trace_printk("Probe DmgChangeWear1Day: Fired.\\n");
-
-    bpf_usdt_readarg(1, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 99;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg1: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-
-    bpf_usdt_readarg(2, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 0;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg2: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
-
-    bpf_usdt_readarg(3, ctx, &ptr);
-    if (ptr) {
-        bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = 1970;
-        bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
-        bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
-        bpf_trace_printk("Arg3: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
-    }
+#else
+    bpf_trace_printk("BPF Compile Error: DmgChangeWear requires -p \"val1,val2,val3\"\\n");
+#endif
     return 0;
 }
 
@@ -425,115 +367,115 @@ int DrmDprSetNvmeEntrysPrefail(struct pt_regs *ctx) {
  * ==================================================================
  */
 
-int DmgChangeCheckWhitelistTrue(struct pt_regs *ctx) {
+/**
+ * @brief DmgChangeCheckWhitelist 的注入处理函数
+ * 接收1个参数: &rc
+ * 通过 -p "value" (0 对应旧的 True 逻辑, 1 对应旧的 False 逻辑) 参数注入指定的返回值。
+ */
+int DmgChangeCheckWhitelist(struct pt_regs *ctx) {
+#ifdef PARAMS_DmgChangeCheckWhitelist
     void *rc_pointer = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
     if (!rc_pointer) {
-        bpf_trace_printk("Probe DmgChangeCheckWhitelistTrue: Fired, but pointer is NULL.\\n");
+        bpf_trace_printk("Probe DmgChangeCheckWhitelist: Fired, but pointer is NULL.\\n");
         return 0;
     }
+    // 从宏解析参数
+    char params[] = PARAMS_DmgChangeCheckWhitelist;
+    int new_value = 0; // 默认值为 0 (对应旧的 True 逻辑)
+
+    // 一个对 BPF 验证器友好的简单解析方法
+    if (params[0] == '1') {
+        new_value = 1; // 对应旧的 False 逻辑
+    }
     int original_val, verified_val = -99;
-    int new_value = 0;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
-    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
-    bpf_trace_printk("Probe DmgChangeCheckWhitelistTrue: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
-    return 0;
-}
+    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);    
+    bpf_trace_printk("Probe DmgChangeCheckWhitelist: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
 
-int DmgChangeCheckWhitelistFalse(struct pt_regs *ctx) {
-    void *rc_pointer = NULL;
-    bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
-    int new_value = 1;
-    bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
-    bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
-    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
-    bpf_trace_printk("Probe DmgChangeCheckWhitelistFalse: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
-    return 0;
-}
-
-int DmgChangeCheckWhitelistCacheTrue(struct pt_regs *ctx) {
-    void *rc_pointer = NULL;
-    bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    bool original_val, verified_val = false;
-    bool new_value = true;
-    bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
-    bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
-    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
-    bpf_trace_printk("Probe DmgChangeCheckWhitelistCacheTrue: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
-    return 0;
-}
-
-int DmgChangeCheckWhitelistCacheFalse(struct pt_regs *ctx) {
-    void *rc_pointer = NULL;
-    bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    bool original_val, verified_val = true;
-    bool new_value = false;
-    bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
-    bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
-    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
-    bpf_trace_printk("Probe DmgChangeCheckWhitelistCacheFalse: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+#else
+    bpf_trace_printk("BPF Compile Error: DmgChangeCheckWhitelist requires a parameter via -p, e.g., -p \"0\" or -p \"1\"\\n");
+#endif
     return 0;
 }
 
 /**
- * @brief DcmReturnLinkErrEinal 的注入处理函数。
- * 适配 LVOS_INJECT1，接收2个参数: &ret, &__lvos_skip_flag
+ * @brief DmgChangeCheckWhitelistCache 的注入处理函数 (合并版本).
+ * 接收1个参数: &rc (类型为 bool)
+ * 通过 -p "value" (1 代表 true, 0 代表 false) 参数注入指定的布尔值。
  */
-int DcmReturnLinkErrEinal(struct pt_regs *ctx) {
+int DmgChangeCheckWhitelistCache(struct pt_regs *ctx) {
+#ifdef PARAMS_DmgChangeCheckWhitelistCache
+    void *rc_pointer = NULL;
+    bpf_usdt_readarg(1, ctx, &rc_pointer);
+    if (!rc_pointer) {
+        bpf_trace_printk("Probe DmgChangeCheckWhitelistCache: Fired, but pointer is NULL.\\n");
+        return 0;
+    }
+
+    // 从宏解析参数
+    char params[] = PARAMS_DmgChangeCheckWhitelistCache;
+    bool new_value = false; // 默认值为 false
+
+    // 期望的参数是 "0" (false) 或 "1" (true)
+    if (params[0] == '1') {
+        new_value = true;
+    }
+
+    bool original_val, verified_val;
+    bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
+    bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
+    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
+
+    bpf_trace_printk("Probe DmgChangeCheckWhitelistCache: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+#else
+    bpf_trace_printk("BPF Compile Error: DmgChangeCheckWhitelistCache requires a parameter via -p, e.g., -p \"0\" or -p \"1\"\\n");
+#endif
+    return 0;
+}
+
+/**
+ * @brief DcmReturnLinkErr 的注入处理函数 (合并版本)。
+ * 适配 LVOS_INJECT1，接收2个参数: &ret, &__lvos_skip_flag
+ * 通过 -p "errorCode" 参数注入指定的错误码。
+ */
+int DcmReturnLinkErr(struct pt_regs *ctx) {
+#ifdef PARAMS_DcmReturnLinkErr
     void *retPtr = NULL;
     void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &retPtr);
     bpf_usdt_readarg(2, ctx, &skipFlagPtr);
-    if (!retPtr || !skipFlagPtr) return 0;
+
+    if (!retPtr || !skipFlagPtr) {
+        bpf_trace_printk("DcmReturnLinkErr Error: Failed to read pointers from probe.\\n");
+        return 0;
+    }
+
+    // 从宏解析参数
+    char params[] = PARAMS_DcmReturnLinkErr;
+    int newValue = 0;
+    #pragma unroll
+    for (int i = 0; i < sizeof(params); i++) {
+        char c = params[i];
+        if (c == '\0') break;
+        if (c >= '0' && c <= '9') {
+            newValue = newValue * 10 + (c - '0');
+        }
+    }
+    
     // 注入故障码
-    int newValue = EINVAL;
     bpf_probe_write_user(retPtr, &newValue, sizeof(newValue));
+    
     // 设置跳过标志
     int one = 1;
     bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
-    bpf_trace_printk("Probe DcmReturnLinkErrEinal: Injected %d and signaled skip.\\n", newValue);
-    return 0;
-}
-
-/**
- * @brief DcmReturnLinkErrEpipe 的注入处理函数。
- */
-int DcmReturnLinkErrEpipe(struct pt_regs *ctx) {
-    void *retPtr = NULL;
-    void *skipFlagPtr = NULL;
-    bpf_usdt_readarg(1, ctx, &retPtr);
-    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
-
-    if (!retPtr || !skipFlagPtr) return 0;
-
-    int newValue = EPIPE;
-    bpf_probe_write_user(retPtr, &newValue, sizeof(newValue));
-    int one = 1;
-    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
-
-    bpf_trace_printk("Probe DcmReturnLinkErrEpipe: Injected %d and signaled skip.\\n", newValue);
-    return 0;
-}
-
-/**
- * @brief DcmReturnLinkErrEnosys 的注入处理函数。
- */
-int DcmReturnLinkErrEnosys(struct pt_regs *ctx) {
-    void *retPtr = NULL;
-    void *skipFlagPtr = NULL;
-    bpf_usdt_readarg(1, ctx, &retPtr);
-    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
-    if (!retPtr || !skipFlagPtr) return 0;
-    int newValue = ENOSYS;
-    bpf_probe_write_user(retPtr, &newValue, sizeof(newValue));
-    int one = 1;
-    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
-    bpf_trace_printk("Probe DcmReturnLinkErrEnosys: Injected %d and signaled skip.\\n", newValue);
+    
+    bpf_trace_printk("Probe DcmReturnLinkErr: Injected %d and signaled skip.\\n", newValue);
+#else
+    bpf_trace_printk("BPF Compile Error: DcmReturnLinkErr requires -p 'errorCode'\\n");
+#endif
     return 0;
 }
 
