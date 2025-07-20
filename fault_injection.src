@@ -1,5 +1,5 @@
 /*
- * fault_injection.c
+ * fault_injection.src
  * * eBPF program containing handlers for various USDT probes.
  * This includes functions for modifying arguments in memory and functions
  * for injecting sleep delays by pausing the target thread.
@@ -17,14 +17,14 @@
  */
 
 /**
- * @brief DmgChangeWear 的注入处理函数 (合并版本).
+ * @brief DmgChangeWear 的注入处理函数.
  * 接收3个参数, 分别为: &wearPercentage, &wearType, &wearValue
- * 通过 -p val1,val2,val3 参数注入指定的整数值。
+ * 通过 -p "val1,val2,val3" 参数注入指定的整数值。
  * 例如:
- * -p 10,0,3000      (模拟 NormalDay)
- * -p 90,0,17270      (模拟 90Day)
- * -p 90,0,5390       (模拟 30Day)
- * -p 99,0,1970       (模拟 1Day)
+ * -p "10,0,3000"       (模拟 NormalDay)
+ * -p "90,0,17270"      (模拟 90Day)
+ * -p "90,0,5390"       (模拟 30Day)
+ * -p "99,0,1970"       (模拟 1Day)
  */
 int DmgChangeWear(struct pt_regs *ctx) {
 #ifdef PARAMS_DmgChangeWear
@@ -97,6 +97,7 @@ int DmgChangeWear(struct pt_regs *ctx) {
 #endif
     return 0;
 }
+
 
 // 定义解析器可以处理的最大字符串长度和期望的参数数量
 #define MAX_DHA_PARAMS_STRING_LEN 80
@@ -230,10 +231,12 @@ int DrmSetDiskDiagMonthLifeCount(struct pt_regs *ctx) {
     // --- 1. 从 USDT 探针读取参数指针 ---
     void *monthCountPtr = NULL;
     void *lifeCountPtr = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &monthCountPtr);
     bpf_usdt_readarg(2, ctx, &lifeCountPtr);
+    bpf_usdt_readarg(3, ctx, &skipFlagPtr);
 
-    if (!monthCountPtr || !lifeCountPtr) {
+    if (!monthCountPtr || !lifeCountPtr || !skipFlagPtr) {
         bpf_trace_printk("DrmSetDiskDiagMonthLifeCount Error: Failed to read pointers from probe.\\n");
         return 0;
     }
@@ -277,13 +280,17 @@ int DrmSetDiskDiagMonthLifeCount(struct pt_regs *ctx) {
         return 0;
     }
 
-    // --- 5. 验证写入是否成功 ---
+    // --- 5. 验证写入是否成功并设置跳过标志 ---
     int verifiedMonthCount = 0;
     int verifiedLifeCount = 0;
     bpf_probe_read_user(&verifiedMonthCount, sizeof(verifiedMonthCount), monthCountPtr);
     bpf_probe_read_user(&verifiedLifeCount, sizeof(verifiedLifeCount), lifeCountPtr);
     bpf_trace_printk("DrmSetDiskDiagMonthLifeCount Verified -> monthCount: %d, lifeCount: %d\\n",
                      verifiedMonthCount, verifiedLifeCount);
+    
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("DrmSetDiskDiagMonthLifeCount: Signaled skip.\\n");
 #else
     // 如果没有提供参数，打印错误信息
     bpf_trace_printk("BPF Compile Error: DrmSetDiskDiagMonthLifeCount requires -p 'monthCount,lifeCount'\\n");
@@ -368,7 +375,7 @@ int DrmDprSetNvmeEntrysPrefail(struct pt_regs *ctx) {
  */
 
 /**
- * @brief DmgChangeCheckWhitelist 的注入处理函数
+ * @brief DmgChangeCheckWhitelist 的注入处理函数.
  * 接收1个参数: &rc
  * 通过 -p "value" (0 对应旧的 True 逻辑, 1 对应旧的 False 逻辑) 参数注入指定的返回值。
  */
@@ -380,18 +387,22 @@ int DmgChangeCheckWhitelist(struct pt_regs *ctx) {
         bpf_trace_printk("Probe DmgChangeCheckWhitelist: Fired, but pointer is NULL.\\n");
         return 0;
     }
+
     // 从宏解析参数
     char params[] = PARAMS_DmgChangeCheckWhitelist;
     int new_value = 0; // 默认值为 0 (对应旧的 True 逻辑)
 
     // 一个对 BPF 验证器友好的简单解析方法
+    // 期望的参数是 "0" 或 "1"
     if (params[0] == '1') {
         new_value = 1; // 对应旧的 False 逻辑
     }
+
     int original_val, verified_val = -99;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
-    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);    
+    bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
+    
     bpf_trace_printk("Probe DmgChangeCheckWhitelist: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
 
 #else
@@ -401,7 +412,7 @@ int DmgChangeCheckWhitelist(struct pt_regs *ctx) {
 }
 
 /**
- * @brief DmgChangeCheckWhitelistCache 的注入处理函数 (合并版本).
+ * @brief DmgChangeCheckWhitelistCache 的注入处理函数.
  * 接收1个参数: &rc (类型为 bool)
  * 通过 -p "value" (1 代表 true, 0 代表 false) 参数注入指定的布尔值。
  */
@@ -436,8 +447,9 @@ int DmgChangeCheckWhitelistCache(struct pt_regs *ctx) {
     return 0;
 }
 
+
 /**
- * @brief DcmReturnLinkErr 的注入处理函数 (合并版本)。
+ * @brief DcmReturnLinkErr 的注入处理函数。
  * 适配 LVOS_INJECT1，接收2个参数: &ret, &__lvos_skip_flag
  * 通过 -p "errorCode" 参数注入指定的错误码。
  */
@@ -481,14 +493,25 @@ int DcmReturnLinkErr(struct pt_regs *ctx) {
 
 int DrmReturnErr(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmReturnErr Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmReturnErr: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmReturnErr: Signaled skip.\\n");
     return 0;
 }
 
@@ -629,14 +652,25 @@ int DhaEbpfCheckEvent(struct pt_regs *ctx) {
 
 int DhaEbpfGetSnErr(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DhaEbpfGetSnErr Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DhaEbpfGetSnErr: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DhaEbpfGetSnErr: Signaled skip.\\n");
     return 0;
 }
 
@@ -654,14 +688,25 @@ int DhaEbpfCorruptShm(struct pt_regs *ctx) {
 
 int DhaEbpfReaderLockUp(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DhaEbpfReaderLockUp Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -6;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DhaEbpfReaderLockUp: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+    
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DhaEbpfReaderLockUp: Signaled skip.\\n");
     return 0;
 }
 
@@ -680,38 +725,65 @@ int DhaEbpfProducerLockUp(struct pt_regs *ctx) {
 
 int DrmDiskDiagOfflineDiskFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagOfflineDiskFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagOfflineDiskFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagOfflineDiskFail: Signaled skip.\\n");
     return 0;
 }
 
 int DrmDiskDiagOnlineDiskFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagOnlineDiskFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagOnlineDiskFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagOnlineDiskFail: Signaled skip.\\n");
     return 0;
 }
 
 #define TP_DISK_DIAG_RES_LEN 50
 int DrmDiskDiagSelfTestDiskFail(struct pt_regs *ctx) {
     void *user_ptr = NULL;
+    void *skipFlagPtr = NULL;
+    bpf_usdt_readarg(1, ctx, &user_ptr);
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!user_ptr || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagSelfTestDiskFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
 
     char new_value[TP_DISK_DIAG_RES_LEN] = "SELF_TEST_FAILED";
-    bpf_usdt_readarg(1, ctx, &user_ptr);
-    if (!user_ptr){ return 0; }
-
     char original_val[TP_DISK_DIAG_RES_LEN], verified_val[TP_DISK_DIAG_RES_LEN];
     // 先清零
     __builtin_memset(original_val, 0, sizeof(original_val));
@@ -719,72 +791,131 @@ int DrmDiskDiagSelfTestDiskFail(struct pt_regs *ctx) {
     bpf_probe_read_user(original_val, sizeof(original_val), user_ptr);
     bpf_probe_write_user(user_ptr, new_value, sizeof(new_value));
     bpf_probe_read_user(verified_val, sizeof(verified_val), user_ptr);
-    bpf_trace_printk("Probe DrmDiskDiagOnlineDiskFail: Read=\"%s\, Wrote=\"%s\, Verified=\"%s\\\n", original_val, new_value, verified_val);
+    bpf_trace_printk("Probe DrmDiskDiagSelfTestDiskFail: Read=\"%s\, Wrote=\"%s\, Verified=\"%s\\\n", original_val, new_value, verified_val);
+    
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagSelfTestDiskFail: Signaled skip.\\n");
     return 0;
 }
 
 int DrmDiskDiagChangeLimitFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagChangeLimitFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagChangeLimitFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagChangeLimitFail: Signaled skip.\\n");
     return 0;
 }
 
 int DrmDiskDiagOnlineDiagFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagOnlineDiagFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagOnlineDiagFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagOnlineDiagFail: Signaled skip.\\n");
     return 0;
 }
 
 int DrmDiskDiagUpdateDiagStatusFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagUpdateDiagStatusFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagUpdateDiagStatusFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagUpdateDiagStatusFail: Signaled skip.\\n");
     return 0;
 }
 
 int DrmDiskDiagGetDiagInfoFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagGetDiagInfoFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+    
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagGetDiagInfoFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagGetDiagInfoFail: Signaled skip.\\n");
     return 0;
 }
 
 int DrmDiskDiagFormatInfoFail(struct pt_regs *ctx) {
     void *rc_pointer = NULL;
+    void *skipFlagPtr = NULL;
     bpf_usdt_readarg(1, ctx, &rc_pointer);
-    if (!rc_pointer) { return 0; }
-    int original_val, verified_val = -99;
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+    
+    if (!rc_pointer || !skipFlagPtr) { 
+        bpf_trace_printk("DrmDiskDiagFormatInfoFail Error: Failed to read pointers from probe.\\n");
+        return 0; 
+    }
+
+    int original_val, verified_val;
     int new_value = -1;
     bpf_probe_read_user(&original_val, sizeof(original_val), rc_pointer);
     bpf_probe_write_user(rc_pointer, &new_value, sizeof(new_value));
     bpf_probe_read_user(&verified_val, sizeof(verified_val), rc_pointer);
     bpf_trace_printk("Probe DrmDiskDiagFormatInfoFail: Read=%d, Wrote=%d, Verified=%d\\n", original_val, new_value, verified_val);
+
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DrmDiskDiagFormatInfoFail: Signaled skip.\\n");
     return 0;
 }
 
@@ -856,22 +987,25 @@ int DcaGetSataHddDhaInfo(struct pt_regs *ctx) {
     // 修改探针位置的变量值
     void *ptr_pot = NULL;
     void *ptr_attrs = NULL;
+    void *skipFlagPtr = NULL;
+
 
     // 读取参数
-    int user_pot = 0, user_smartAttr[DHA_SATA_HDD_SMART_ATTR_CNT] = {};
-    if (bpf_usdt_readarg(1, ctx, &ptr_pot) < 0 || !ptr_pot) {
-        bpf_trace_printk("readarg(1) error\\n");
+    bpf_usdt_readarg(1, ctx, &ptr_pot);
+    bpf_usdt_readarg(2, ctx, &ptr_attrs);
+    bpf_usdt_readarg(3, ctx, &skipFlagPtr);
+
+    if (!ptr_pot || !ptr_attrs || !skipFlagPtr) {
+        bpf_trace_printk("DcaGetSataHddDhaInfo Error: Failed to read pointers from probe.\\n");
         return 0;
     }
+
+    int user_pot = 0, user_smartAttr[DHA_SATA_HDD_SMART_ATTR_CNT] = {};
     if (bpf_probe_read_user(&user_pot, sizeof(user_pot), ptr_pot) < 0) {
         bpf_trace_printk("read_user pot error\\n");
         return 0;
     }
 
-    if (bpf_usdt_readarg(2, ctx, &ptr_attrs) < 0 || !ptr_attrs) {
-        bpf_trace_printk("readarg(2) error\\n");
-        return 0;
-    }
     if (bpf_probe_read_user(&user_smartAttr, sizeof(user_smartAttr), ptr_attrs) < 0) {
         bpf_trace_printk("read_user attrs error\\n");
         return 0;
@@ -932,6 +1066,9 @@ int DcaGetSataHddDhaInfo(struct pt_regs *ctx) {
     bpf_trace_printk("Attr0: %d, Attr1: %d, Attr2: %d", user_smartAttr[0], user_smartAttr[1], user_smartAttr[2]);
     bpf_trace_printk("Attr3: %d, Attr4: %d, Attr5: %d", user_smartAttr[3], user_smartAttr[4], user_smartAttr[5]);
 
+    int one = 1;
+    bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+    bpf_trace_printk("Probe DcaGetSataHddDhaInfo: Signaled skip.\\n");
     return 0;
 
 #endif
@@ -1089,10 +1226,15 @@ int DrmSlowDiskDetectGetIostatFailTp(struct pt_regs *ctx) {
 #endif
 
     void *ptr = NULL;
+    void *skipFlagPtr = NULL;
     int diskId = 0;
 
     bpf_usdt_readarg(1, ctx, &ptr);
-    if (!ptr) { return 0; }
+    bpf_usdt_readarg(3, ctx, &skipFlagPtr); // skip flag is the 3rd argument for this probe
+    if (!ptr || !skipFlagPtr) { 
+        bpf_trace_printk("DrmSlowDiskDetectGetIostatFailTp Error: Failed to read pointers from probe.\\n");
+        return 0;
+    }
     bpf_probe_read_user(&diskId, sizeof(diskId), ptr);
 
 #ifdef PARAMS_DrmSlowDiskDetectGetIostatFailTp
@@ -1119,14 +1261,18 @@ int DrmSlowDiskDetectGetIostatFailTp(struct pt_regs *ctx) {
     }
 #endif
 
-    int original_val, verified_val, new_val;
-    bpf_usdt_readarg(2, ctx, &ptr);
+    int original_val, verified_val;
+    int new_val = -1;
+    bpf_usdt_readarg(2, ctx, &ptr); // The return value pointer is the 2nd argument
     if (ptr) {
         bpf_probe_read_user(&original_val, sizeof(original_val), ptr);
-        new_val = -1;
         bpf_probe_write_user(ptr, &new_val, sizeof(new_val));
         bpf_probe_read_user(&verified_val, sizeof(verified_val), ptr);
         bpf_trace_printk("Probe DrmSlowDiskDetectGetIostatFailTp: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
+        
+        int one = 1;
+        bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+        bpf_trace_printk("Probe DrmSlowDiskDetectGetIostatFailTp: Signaled skip.\\n");
     }
 
     return 0;
@@ -1180,5 +1326,410 @@ int DrmDprDiskInPrefail(struct pt_regs *ctx) {
         bpf_trace_printk("Probe DrmDprDiskInPrefail: read=%d, wrote=%d, verified=%d\\n", original_val, new_val, verified_val);
     }
 
+    return 0;
+}
+
+/**
+ * @brief DrmDprDiskFailTp 的注入处理函数。
+ * 接收3个参数: diskId, &__lvos_skip_flag。
+ * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
+ * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
+ */
+int DrmDprDiskFailTp(struct pt_regs *ctx) {
+#ifdef PARAMS_DrmDprDiskFailTp
+    // --- 1. 从 USDT 探针读取所有参数 ---
+    void *diskId = NULL;
+    void *skipFlagPtr = NULL;
+
+    bpf_usdt_readarg(1, ctx, &diskId);
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    u32 currentDiskId = DISK_MAX_DISK_ID;
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskId);
+
+    if (!skipFlagPtr) {
+        bpf_trace_printk("DrmDprDiskFailTp Error: Failed to read pointers.\\n");
+        return 0;
+    }
+
+    char params[MAX_NVME_PREFAIL_PARAM_LEN] = PARAMS_DrmDprDiskFailTp;
+
+    // --- 2. 根据是否提供参数，决定注入逻辑 ---
+
+    // 情况 A: 未提供 -p 参数 (params 为空字符串), 对所有 diskId 注入
+    if (params[0] == '\0') {
+        // 设置跳过标志
+        int one = 1;
+        bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+
+        bpf_trace_printk("DrmDprDiskFailTp Injected (no params) -> diskId: %u, \\n", currentDiskId);
+        return 0; // 完成注入，退出
+    }
+
+    // 情况 B: 提供了 -p 参数, 解析 diskId 列表并匹配
+    bool shouldInject = false;
+    u32 parsedId = 0;
+    #pragma unroll
+    for (int i = 0; i < MAX_NVME_PREFAIL_PARAM_LEN; i++) {
+        char c = params[i];
+        if (c == '\0' || c == ',') {
+            if (parsedId == currentDiskId) {
+                shouldInject = true;
+                break;
+            }
+            parsedId = 0; // 为下一个数字重置
+            if (c == '\0') break;
+        } else if (c >= '0' && c <= '9') {
+            parsedId = parsedId * 10 + (c - '0');
+        }
+    }
+    // 检查最后一个数字
+    if (!shouldInject && parsedId != 0 && parsedId == currentDiskId) {
+        shouldInject = true;
+    }
+
+    // 如果匹配，则执行注入
+    if (shouldInject) {
+        int one = 1;
+        bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+        bpf_trace_printk("DrmDprDiskFailTp Injected (matched) -> diskId: %u, \\n", currentDiskId);
+    }
+#endif
+    return 0;
+}
+
+
+/**
+ * @brief DrmSlowDiskDetectCreateDiskObjFailTp 的注入处理函数。
+ * 接收3个参数: diskId, &__lvos_skip_flag。
+ * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
+ * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
+ */
+int DrmSlowDiskDetectCreateDiskObjFailTp(struct pt_regs *ctx) {
+#ifdef PARAMS_DrmSlowDiskDetectCreateDiskObjFailTp
+    // --- 1. 从 USDT 探针读取所有参数 ---
+    void *diskId = NULL;
+    void *skipFlagPtr = NULL;
+
+    bpf_usdt_readarg(1, ctx, &diskId);
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+
+    u32 currentDiskId = DISK_MAX_DISK_ID;
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskId);
+
+    if (!skipFlagPtr) {
+        bpf_trace_printk("DrmSlowDiskDetectCreateDiskObjFailTp Error: Failed to read pointers.\\n");
+        return 0;
+    }
+
+    char params[MAX_NVME_PREFAIL_PARAM_LEN] = PARAMS_DrmSlowDiskDetectCreateDiskObjFailTp;
+
+    // --- 2. 根据是否提供参数，决定注入逻辑 ---
+
+    // 情况 A: 未提供 -p 参数 (params 为空字符串), 对所有 diskId 注入
+    if (params[0] == '\0') {
+        // 设置跳过标志
+        int one = 1;
+        bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+
+        bpf_trace_printk("DrmSlowDiskDetectCreateDiskObjFailTp Injected (no params) -> diskId: %u, \\n", currentDiskId);
+        return 0; // 完成注入，退出
+    }
+
+    // 情况 B: 提供了 -p 参数, 解析 diskId 列表并匹配
+    bool shouldInject = false;
+    u32 parsedId = 0;
+    #pragma unroll
+    for (int i = 0; i < MAX_NVME_PREFAIL_PARAM_LEN; i++) {
+        char c = params[i];
+        if (c == '\0' || c == ',') {
+            if (parsedId == currentDiskId) {
+                shouldInject = true;
+                break;
+            }
+            parsedId = 0; // 为下一个数字重置
+            if (c == '\0') break;
+        } else if (c >= '0' && c <= '9') {
+            parsedId = parsedId * 10 + (c - '0');
+        }
+    }
+    // 检查最后一个数字
+    if (!shouldInject && parsedId != 0 && parsedId == currentDiskId) {
+        shouldInject = true;
+    }
+
+    // 如果匹配，则执行注入
+    if (shouldInject) {
+        int one = 1;
+        bpf_probe_write_user(skipFlagPtr, &one, sizeof(one));
+        bpf_trace_printk("DrmSlowDiskDetectCreateDiskObjFailTp Injected (matched) -> diskId: %u, \\n", currentDiskId);
+    }
+#endif
+    return 0;
+}
+
+
+#define MAX_SATA_SMART_ENTRY_PARAMS_STRING_LEN 1
+#define DRM_SMART_ATTR_NUMBER           30
+typedef struct {
+    uint8_t id;           /* SMART属性ID */
+    uint8_t threshold;    /* 门限值 */
+    uint8_t curValue;
+    uint8_t worst;
+} DRM_SATA_SMART_ENTRY_S;
+/**
+ * @brief DrmDprSetSataSmartEntrysPrefail 的注入处理函数。
+ * 此版本根据参考代码逻辑进行重构，在 eBPF 内核空间解析字符串并修改所有三个探针参数。
+ * 输入参数格式: -p "diskId,opcode,protocol,senseKey,senseCode"
+ */
+int DrmDprSetSataSmartEntrysPrefail(struct pt_regs *ctx) {
+    // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
+#ifdef PARAMS_DrmDprSetSataSmartEntrysPrefail
+    // --- 1. 从 USDT 探针读取所有参数 ---
+    void *diskIdPtr = NULL;
+
+    bpf_usdt_readarg(1, ctx, &diskIdPtr);
+
+    u32 currentDiskId = DISK_MAX_DISK_ID;
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskIdPtr);
+
+    char params[MAX_NVME_PREFAIL_PARAM_LEN] = PARAMS_DrmDprSetSataSmartEntrysPrefail;
+
+    // --- 2. 根据是否提供参数，决定注入逻辑 ---
+    bool shouldInject = false;
+
+    // 情况 B: 提供了 -p 参数, 解析 diskId 列表并匹配
+    u32 parsedId = 0;
+    #pragma unroll
+    for (int i = 0; i < MAX_NVME_PREFAIL_PARAM_LEN; i++) {
+        char c = params[i];
+        if (c == '\0' || c == ',') {
+            if (parsedId == currentDiskId) {
+                shouldInject = true;
+                break;
+            }
+            parsedId = 0; // 为下一个数字重置
+            if (c == '\0') break;
+        } else if (c >= '0' && c <= '9') {
+            parsedId = parsedId * 10 + (c - '0');
+        }
+    }
+    // 检查最后一个数字
+    if (!shouldInject && parsedId != 0 && parsedId == currentDiskId) {
+        shouldInject = true;
+    }
+
+    // 情况 A: 未提供 -p 参数 (params 为空字符串), 对所有 diskId 注入
+    if (params[0] == '\0') {
+        shouldInject = true;
+    }
+
+    // 如果匹配，则执行注入
+    if (!shouldInject) {
+        return 0;
+    }
+
+    void *entrysPtr = NULL;
+    bpf_usdt_readarg(2, ctx, &entrysPtr);
+    
+    DRM_SATA_SMART_ENTRY_S newEntrys[DRM_SMART_ATTR_NUMBER] = {};
+    newEntrys[0].id = 1;           /* SMART属性ID */
+    newEntrys[0].threshold = 0;    /* 门限值 */
+    newEntrys[0].curValue = 1;
+    newEntrys[0].worst = 0;
+
+    if (bpf_probe_write_user(entrysPtr, &newEntrys, sizeof(newEntrys)) < 0) {
+        bpf_trace_printk("DrmDprSetSataSmartEntrysPrefail Error: Failed to write modified event.\\n");
+        return 0;
+    }
+
+    // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
+    u32 verifiedDiskId = DISK_MAX_DISK_ID;
+    DhaAnlyIoErrorParam verifiedEntrys = {};
+    bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
+    bpf_probe_read_user(&verifiedEntrys, sizeof(verifiedEntrys), entrysPtr);
+
+    bpf_trace_printk("DrmDprSetSataSmartEntrysPrefail Verified -> senseKey: %u, senseCode: %u, time(us): %llu\\n",
+                     verifiedEntrys[0].id, verifiedEntrys[0].curValue, verifiedEntrys.worst);
+#else
+    bpf_trace_printk("BPF Compile Error: DrmDprSetSataSmartEntrysPrefail requires a parameter string via -p.\\n");
+#endif
+    return 0;
+}
+
+
+#define DRM_ASC_IMPENDING_FAILURE 0x5d /* 硬盘即将失效 */
+typedef struct {
+    uint8_t asc;
+    uint8_t ascq;
+    bool isSupportIELog;
+    uint32_t uncCnt;
+    uint32_t sectorSize;     /* 扇区大小 */
+    uint64_t diskCapacity;   /* 硬盘容量 */
+    uint64_t lossCapacity;  /* 损失容量 */
+} DRM_SAS_SENSE_DATA_FOR_PREFAIL;
+/**
+ * @brief DrmDprSetSasSsdEntrysPrefail 的注入处理函数。
+ * 此版本根据参考代码逻辑进行重构，在 eBPF 内核空间解析字符串并修改所有三个探针参数。
+ * 输入参数格式: -p "diskId,opcode,protocol,senseKey,senseCode"
+ */
+int DrmDprSetSasSsdEntrysPrefail(struct pt_regs *ctx) {
+    // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
+#ifdef PARAMS_DrmDprSetSasSsdEntrysPrefail
+    // --- 1. 从 USDT 探针读取所有参数 ---
+    void *diskIdPtr = NULL;
+
+    bpf_usdt_readarg(1, ctx, &diskIdPtr);
+
+    u32 currentDiskId = DISK_MAX_DISK_ID;
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskIdPtr);
+
+    char params[MAX_NVME_PREFAIL_PARAM_LEN] = PARAMS_DrmDprSetSasSsdEntrysPrefail;
+
+    // --- 2. 根据是否提供参数，决定注入逻辑 ---
+    bool shouldInject = false;
+
+    // 情况 B: 提供了 -p 参数, 解析 diskId 列表并匹配
+    u32 parsedId = 0;
+    #pragma unroll
+    for (int i = 0; i < MAX_NVME_PREFAIL_PARAM_LEN; i++) {
+        char c = params[i];
+        if (c == '\0' || c == ',') {
+            if (parsedId == currentDiskId) {
+                shouldInject = true;
+                break;
+            }
+            parsedId = 0; // 为下一个数字重置
+            if (c == '\0') break;
+        } else if (c >= '0' && c <= '9') {
+            parsedId = parsedId * 10 + (c - '0');
+        }
+    }
+    // 检查最后一个数字
+    if (!shouldInject && parsedId != 0 && parsedId == currentDiskId) {
+        shouldInject = true;
+    }
+
+    // 情况 A: 未提供 -p 参数 (params 为空字符串), 对所有 diskId 注入
+    if (params[0] == '\0') {
+        shouldInject = true;
+    }
+
+    // 如果匹配，则执行注入
+    if (!shouldInject) {
+        return 0;
+    }
+
+    void *ieLogPtr = NULL;
+    bpf_usdt_readarg(2, ctx, &ieLogPtr);
+    
+    DRM_SATA_SMART_ENTRY_S newIeLog = { 0 };
+    newIeLog.asc = DRM_ASC_IMPENDING_FAILURE;
+    newIeLog.ascq = 0;
+    newIeLog.isSupportIELog = true;
+
+    if (bpf_probe_write_user(ieLogPtr, &newIeLog, sizeof(newIeLog)) < 0) {
+        bpf_trace_printk("DrmDprSetSasSsdEntrysPrefail Error: Failed to write modified event.\\n");
+        return 0;
+    }
+
+    // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
+    u32 verifiedDiskId = DISK_MAX_DISK_ID;
+    DRM_SATA_SMART_ENTRY_S verifiedIeLog = { 0 };
+    DhaAnlyIoErrorParam verifiedIoErrorParam = {};
+    bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
+    bpf_probe_read_user(&verifiedIeLog, sizeof(verifiedIeLog), verifiedIeLog);
+
+    bpf_trace_printk("DrmDprSetSasSsdEntrysPrefail Verified -> senseKey: %u, senseCode: %u, time(us): %llu\\n",
+                     verifiedIeLog.asc, verifiedIeLog.ascq, verifiedIeLog.isSupportIELog);
+#else
+    bpf_trace_printk("BPF Compile Error: DrmDprSetSasSsdEntrysPrefail requires a parameter string via -p.\\n");
+#endif
+    return 0;
+}
+
+#define DRM_SMART_HSSD_CAPACITOR_STATUS    242 /* SMART HSSSD 超级电容ID号 */
+typedef struct {
+    uint8_t capId;     /* 电容ID */
+    uint8_t capStatus; /* 电容状态 */
+} DRM_SAS_HSSD_LOG_PAGE_FOR_PREFAIL;
+
+
+/**
+ * @brief DrmDprSetSasHssdEntrysPrefail 的注入处理函数。
+ * 此版本根据参考代码逻辑进行重构，在 eBPF 内核空间解析字符串并修改所有三个探针参数。
+ * 输入参数格式: -p "diskId,opcode,protocol,senseKey,senseCode"
+ */
+int DrmDprSetSasHssdEntrysPrefail(struct pt_regs *ctx) {
+    // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
+#ifdef PARAMS_DrmDprSetSasHssdEntrysPrefail
+    // --- 1. 从 USDT 探针读取所有参数 ---
+    void *diskIdPtr = NULL;
+
+    bpf_usdt_readarg(1, ctx, &diskIdPtr);
+
+    u32 currentDiskId = DISK_MAX_DISK_ID;
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskIdPtr);
+
+    char params[MAX_NVME_PREFAIL_PARAM_LEN] = PARAMS_DrmDprSetSasHssdEntrysPrefail;
+
+    // --- 2. 根据是否提供参数，决定注入逻辑 ---
+    bool shouldInject = false;
+
+    // 情况 B: 提供了 -p 参数, 解析 diskId 列表并匹配
+    u32 parsedId = 0;
+    #pragma unroll
+    for (int i = 0; i < MAX_NVME_PREFAIL_PARAM_LEN; i++) {
+        char c = params[i];
+        if (c == '\0' || c == ',') {
+            if (parsedId == currentDiskId) {
+                shouldInject = true;
+                break;
+            }
+            parsedId = 0; // 为下一个数字重置
+            if (c == '\0') break;
+        } else if (c >= '0' && c <= '9') {
+            parsedId = parsedId * 10 + (c - '0');
+        }
+    }
+    // 检查最后一个数字
+    if (!shouldInject && parsedId != 0 && parsedId == currentDiskId) {
+        shouldInject = true;
+    }
+
+    // 情况 A: 未提供 -p 参数 (params 为空字符串), 对所有 diskId 注入
+    if (params[0] == '\0') {
+        shouldInject = true;
+    }
+
+    // 如果匹配，则执行注入
+    if (!shouldInject) {
+        return 0;
+    }
+
+    void *logPagePtr = NULL;
+    bpf_usdt_readarg(2, ctx, &logPagePtr);
+    
+    DRM_SATA_SMART_ENTRY_S newLogPage = { 0 };
+    newLogPage.capId = DRM_SMART_HSSD_CAPACITOR_STATUS;
+    newLogPage.capStatus = 0;
+
+    if (bpf_probe_write_user(logPagePtr, &newLogPage, sizeof(newLogPage)) < 0) {
+        bpf_trace_printk("DrmDprSetSasHssdEntrysPrefail Error: Failed to write modified event.\\n");
+        return 0;
+    }
+
+    // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
+    u32 verifiedDiskId = DISK_MAX_DISK_ID;
+    DRM_SATA_SMART_ENTRY_S verifiedLogPage = { 0 };
+    DhaAnlyIoErrorParam verifiedIoErrorParam = {};
+    bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
+    bpf_probe_read_user(&verifiedLogPage, sizeof(verifiedLogPage), verifiedLogPage);
+
+    bpf_trace_printk("DrmDprSetSasHssdEntrysPrefail Verified -> senseKey: %u, senseCode: %u\\n",
+                     verifiedLogPage.capId, verifiedLogPage.capStatus);
+#else
+    bpf_trace_printk("BPF Compile Error: DrmDprSetSasHssdEntrysPrefail requires a parameter string via -p.\\n");
+#endif
     return 0;
 }
