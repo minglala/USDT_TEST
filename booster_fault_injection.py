@@ -8,13 +8,13 @@ import signal
 import time
 
 # 定义 BPF C 代码源文件名
-BPF_SOURCE_FILE = "fault_injection.c"
+BPF_SOURCE_FILE = "fault_injection.src"
 
 # defines the probe point corresponding to the fault injection function.
 fn_table = {
     "DmgChangeWear": ("DmgChangeWear", "data mgr get various wear to predicte disk life."),
-    "DmgChangeCheckWhitelist": ("DmgChangeCheckWhitelistTrue", "data mgr check whitelist."),
-    "DmgChangeCheckWhitelistCache": ("DmgChangeCheckWhitelistCacheTrue", "data mgr check whitelist cache."),
+    "DmgChangeCheckWhitelist": ("DmgChangeCheckWhitelist", "data mgr check whitelist."),
+    "DmgChangeCheckWhitelistCache": ("DmgChangeCheckWhitelistCache", "data mgr check whitelist cache."),
     "DcmReturnLinkErr": ("DcmReturnLinkErr", "data collect mgr meet link err when getting data from agent."),
     "DrmReturnErr": ("DrmReturnErr", "drm get health info failed."),
     "CliReturnTimeOut30S": ("CliReturnTimeOut30S", "cli query info failed."),
