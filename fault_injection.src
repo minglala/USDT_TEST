@@ -1401,7 +1401,7 @@ int DrmDprDiskFailTp(struct pt_regs *ctx) {
 
 /**
  * @brief DrmSlowDiskDetectCreateDiskObjFailTp 的注入处理函数。
- * 接收3个参数: diskId, &__lvos_skip_flag。
+ * 接收2个参数: diskId, &__lvos_skip_flag。
  * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
  * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
  */
@@ -1479,8 +1479,8 @@ typedef struct {
 } DRM_SATA_SMART_ENTRY_S;
 /**
  * @brief DrmDprSetSataSmartEntrysPrefail 的注入处理函数。
- * 此版本根据参考代码逻辑进行重构，在 eBPF 内核空间解析字符串并修改所有三个探针参数。
- * 输入参数格式: -p "diskId,opcode,protocol,senseKey,senseCode"
+ * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
+ * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
  */
 int DrmDprSetSataSmartEntrysPrefail(struct pt_regs *ctx) {
     // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
@@ -1545,7 +1545,7 @@ int DrmDprSetSataSmartEntrysPrefail(struct pt_regs *ctx) {
 
     // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
     u32 verifiedDiskId = DISK_MAX_DISK_ID;
-    DhaAnlyIoErrorParam verifiedEntrys = {};
+    DRM_SATA_SMART_ENTRY_S verifiedEntrys = {};
     bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
     bpf_probe_read_user(&verifiedEntrys, sizeof(verifiedEntrys), entrysPtr);
 
@@ -1570,8 +1570,8 @@ typedef struct {
 } DRM_SAS_SENSE_DATA_FOR_PREFAIL;
 /**
  * @brief DrmDprSetSasSsdEntrysPrefail 的注入处理函数。
- * 此版本根据参考代码逻辑进行重构，在 eBPF 内核空间解析字符串并修改所有三个探针参数。
- * 输入参数格式: -p "diskId,opcode,protocol,senseKey,senseCode"
+ * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
+ * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
  */
 int DrmDprSetSasSsdEntrysPrefail(struct pt_regs *ctx) {
     // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
@@ -1623,7 +1623,7 @@ int DrmDprSetSasSsdEntrysPrefail(struct pt_regs *ctx) {
     void *ieLogPtr = NULL;
     bpf_usdt_readarg(2, ctx, &ieLogPtr);
     
-    DRM_SATA_SMART_ENTRY_S newIeLog = { 0 };
+    DRM_SAS_SENSE_DATA_FOR_PREFAIL newIeLog = { 0 };
     newIeLog.asc = DRM_ASC_IMPENDING_FAILURE;
     newIeLog.ascq = 0;
     newIeLog.isSupportIELog = true;
@@ -1635,8 +1635,7 @@ int DrmDprSetSasSsdEntrysPrefail(struct pt_regs *ctx) {
 
     // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
     u32 verifiedDiskId = DISK_MAX_DISK_ID;
-    DRM_SATA_SMART_ENTRY_S verifiedIeLog = { 0 };
-    DhaAnlyIoErrorParam verifiedIoErrorParam = {};
+    DRM_SAS_SENSE_DATA_FOR_PREFAIL verifiedIeLog = { 0 };
     bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
     bpf_probe_read_user(&verifiedIeLog, sizeof(verifiedIeLog), verifiedIeLog);
 
@@ -1648,6 +1647,86 @@ int DrmDprSetSasSsdEntrysPrefail(struct pt_regs *ctx) {
     return 0;
 }
 
+/**
+ * @brief DrmDprSetNlSasHddEntrysPrefail 的注入处理函数。
+ * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
+ * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
+ */
+int DrmDprSetNlSasHddEntrysPrefail(struct pt_regs *ctx) {
+    // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
+#ifdef PARAMS_DrmDprSetNlSasHddEntrysPrefail
+    // --- 1. 从 USDT 探针读取所有参数 ---
+    void *diskIdPtr = NULL;
+
+    bpf_usdt_readarg(1, ctx, &diskIdPtr);
+
+    u32 currentDiskId = DISK_MAX_DISK_ID;
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskIdPtr);
+
+    char params[MAX_NVME_PREFAIL_PARAM_LEN] = PARAMS_DrmDprSetNlSasHddEntrysPrefail;
+
+    // --- 2. 根据是否提供参数，决定注入逻辑 ---
+    bool shouldInject = false;
+
+    // 情况 B: 提供了 -p 参数, 解析 diskId 列表并匹配
+    u32 parsedId = 0;
+    #pragma unroll
+    for (int i = 0; i < MAX_NVME_PREFAIL_PARAM_LEN; i++) {
+        char c = params[i];
+        if (c == '\0' || c == ',') {
+            if (parsedId == currentDiskId) {
+                shouldInject = true;
+                break;
+            }
+            parsedId = 0; // 为下一个数字重置
+            if (c == '\0') break;
+        } else if (c >= '0' && c <= '9') {
+            parsedId = parsedId * 10 + (c - '0');
+        }
+    }
+    // 检查最后一个数字
+    if (!shouldInject && parsedId != 0 && parsedId == currentDiskId) {
+        shouldInject = true;
+    }
+
+    // 情况 A: 未提供 -p 参数 (params 为空字符串), 对所有 diskId 注入
+    if (params[0] == '\0') {
+        shouldInject = true;
+    }
+
+    // 如果匹配，则执行注入
+    if (!shouldInject) {
+        return 0;
+    }
+
+    void *ieLogPtr = NULL;
+    bpf_usdt_readarg(2, ctx, &ieLogPtr);
+    
+    DRM_SAS_SENSE_DATA_FOR_PREFAIL newIeLog = { 0 };
+    newIeLog.asc = DRM_ASC_IMPENDING_FAILURE;
+    newIeLog.ascq = 0;
+    newIeLog.isSupportIELog = true;
+
+    if (bpf_probe_write_user(ieLogPtr, &newIeLog, sizeof(newIeLog)) < 0) {
+        bpf_trace_printk("DrmDprSetNlSasHddEntrysPrefail Error: Failed to write modified event.\\n");
+        return 0;
+    }
+
+    // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
+    u32 verifiedDiskId = DISK_MAX_DISK_ID;
+    DRM_SAS_SENSE_DATA_FOR_PREFAIL verifiedIeLog = { 0 };
+    bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
+    bpf_probe_read_user(&verifiedIeLog, sizeof(verifiedIeLog), verifiedIeLog);
+
+    bpf_trace_printk("DrmDprSetNlSasHddEntrysPrefail Verified -> senseKey: %u, senseCode: %u, time(us): %llu\\n",
+                     verifiedIeLog.asc, verifiedIeLog.ascq, verifiedIeLog.isSupportIELog);
+#else
+    bpf_trace_printk("BPF Compile Error: DrmDprSetNlSasHddEntrysPrefail requires a parameter string via -p.\\n");
+#endif
+    return 0;
+}
+
+
 #define DRM_SMART_HSSD_CAPACITOR_STATUS    242 /* SMART HSSSD 超级电容ID号 */
 typedef struct {
     uint8_t capId;     /* 电容ID */
@@ -1657,8 +1736,8 @@ typedef struct {
 
 /**
  * @brief DrmDprSetSasHssdEntrysPrefail 的注入处理函数。
- * 此版本根据参考代码逻辑进行重构，在 eBPF 内核空间解析字符串并修改所有三个探针参数。
- * 输入参数格式: -p "diskId,opcode,protocol,senseKey,senseCode"
+ * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
+ * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
  */
 int DrmDprSetSasHssdEntrysPrefail(struct pt_regs *ctx) {
     // 将所有逻辑包裹在 #ifdef 中，以避免在未定义宏时发生编译错误
@@ -1710,7 +1789,7 @@ int DrmDprSetSasHssdEntrysPrefail(struct pt_regs *ctx) {
     void *logPagePtr = NULL;
     bpf_usdt_readarg(2, ctx, &logPagePtr);
     
-    DRM_SATA_SMART_ENTRY_S newLogPage = { 0 };
+    DRM_SAS_HSSD_LOG_PAGE_FOR_PREFAIL newLogPage = { 0 };
     newLogPage.capId = DRM_SMART_HSSD_CAPACITOR_STATUS;
     newLogPage.capStatus = 0;
 
@@ -1721,8 +1800,7 @@ int DrmDprSetSasHssdEntrysPrefail(struct pt_regs *ctx) {
 
     // --- 5. 验证写入是否成功 (应避免bpf_trace_printk 参数过多的问题) ---
     u32 verifiedDiskId = DISK_MAX_DISK_ID;
-    DRM_SATA_SMART_ENTRY_S verifiedLogPage = { 0 };
-    DhaAnlyIoErrorParam verifiedIoErrorParam = {};
+    DRM_SAS_HSSD_LOG_PAGE_FOR_PREFAIL verifiedLogPage = { 0 };
     bpf_probe_read_user(&verifiedDiskId, sizeof(verifiedDiskId), diskIdPtr);
     bpf_probe_read_user(&verifiedLogPage, sizeof(verifiedLogPage), verifiedLogPage);
 
