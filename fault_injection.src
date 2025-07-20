@@ -1331,7 +1331,7 @@ int DrmDprDiskInPrefail(struct pt_regs *ctx) {
 
 /**
  * @brief DrmDprDiskFailTp 的注入处理函数。
- * 接收3个参数: diskId, &__lvos_skip_flag。
+ * 接收2个参数: diskId, &__lvos_skip_flag。
  * - 如果不提供 -p 参数, 则对所有 diskId 注入故障。
  * - 如果提供 -p "id1,id2,..." 参数, 则仅对匹配的 diskId 注入故障。
  */
