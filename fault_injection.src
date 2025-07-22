@@ -1811,3 +1811,101 @@ int DrmDprSetSasHssdEntrysPrefail(struct pt_regs *ctx) {
 #endif
     return 0;
 }
+
+/**
+ * @brief DrmSlowDiskDetectSkipUpdateDiskPerfTp 的注入处理函数。
+ * 探针参数: 1: &diskId (uint32_t *), 2: &skip (bool *)
+ * 通过 -p "count,id1,id2,...,idN" 的格式来筛选 diskId，其中 count 最大为 128。
+ * 例如: -p "2,1,4" 表示要匹配 diskId 为 1 或 4 的情况。
+ */
+int DrmSlowDiskDetectSkipUpdateDiskPerfTp(struct pt_regs *ctx)
+{
+#ifdef PARAMS_DrmSlowDiskDetectSkipUpdateDiskPerfTp
+    // --- 1. 从探针读取当前 diskId 和 skip 指针 ---
+    u32 currentDiskId = 0;
+    void *skipFlagPtr = NULL;
+
+    void *diskIdPtr = NULL;
+    bpf_usdt_readarg(1, ctx, &diskIdPtr);
+    if (!diskIdPtr) {
+        return 0;
+    }
+    bpf_probe_read_user(&currentDiskId, sizeof(currentDiskId), diskIdPtr);
+
+    bpf_usdt_readarg(2, ctx, &skipFlagPtr);
+    if (!skipFlagPtr) {
+        return 0;
+    }
+
+    // --- 2. 解析 "count,id1,id2,..." 格式的参数 ---
+    // 使用一个足够大的缓冲区来存放参数字符串
+    char params[] = PARAMS_DrmSlowDiskDetectSkipUpdateDiskPerfTp;  // 假设字符串长度不超过1024
+
+    // 数组大小为 128个ID + 1个count = 129
+    long values[129] = {0};
+    int param_idx = 0;
+
+#pragma unroll
+    for (int i = 0; i < sizeof(params); i++) {
+        char c = params[i];
+        if (c == '\0')
+            break;
+        if (c == ',') {
+            param_idx++;
+            // 保护性检查，防止越界
+            if (param_idx >= 129)
+                break;
+        } else if (c >= '0' && c <= '9') {
+            if (param_idx < 129) {
+                values[param_idx] = values[param_idx] * 10 + (c - '0');
+            }
+        }
+    }
+
+    // --- 3. 验证并匹配 diskId ---
+    // values[0] 是期望的 diskId 数量
+    uint32_t expected_id_count = (uint32_t)values[0];
+
+    // param_idx 是解析出的逗号数量，因此解析出的数字总数是 param_idx + 1
+    // 如果 count 是 N, 那么总数字数是 N+1, 逗号数量是 N。所以 param_idx 应该等于 expected_id_count
+    if (expected_id_count != param_idx || expected_id_count > 128) {
+        bpf_trace_printk("DrmSlowDiskDetectSkipUpdateDiskPerfTp: Param count mismatch or exceeds limit. Expected %u "
+                         "IDs, found %d total numbers. Input: %s\\n",
+            expected_id_count,
+            param_idx + 1,
+            params);
+        return 0;
+    }
+
+    bool shouldInject = false;
+#pragma unroll
+    for (int i = 0; i < 128; i++) {
+        // 为了通过 BPF 验证器，循环次数必须是常量。
+        // 我们只比较到用户指定的 count 即可。
+        if (i >= expected_id_count) {
+            break;
+        }
+        // 实际的 diskId 从 values[1] 开始
+        if (currentDiskId == (u32)values[i + 1]) {
+            shouldInject = true;
+            break;
+        }
+    }
+
+    // --- 4. 如果匹配成功，则执行注入 ---
+    if (shouldInject) {
+        bpf_trace_printk(
+            "DrmSlowDiskDetectSkipUpdateDiskPerfTp: Matched diskId %u. Setting skip=true.\\n", currentDiskId);
+
+        bool new_val = true;
+        if (bpf_probe_write_user(skipFlagPtr, &new_val, sizeof(new_val)) < 0) {
+            bpf_trace_printk("DrmSlowDiskDetectSkipUpdateDiskPerfTp Error: Failed to write to skipFlagPtr.\\n");
+            return 0;
+        }
+    }
+
+#else
+    bpf_trace_printk("BPF Compile Error: DrmSlowDiskDetectSkipUpdateDiskPerfTp requires a parameter string via -p.\\n");
+#endif
+    return 0;
+}
