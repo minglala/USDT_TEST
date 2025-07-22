@@ -42,12 +42,24 @@ fn_table = {
     "DcaGetSataHddDhaInfo": ("DcaGetSataHddDhaInfo", "dca get sata hdd dha info"),
     "DmgGetDhaInfoFail": ("DmgGetDhaInfoFail", "data mgr get dha info failed"),
     "DrmSetDiskDiagMonthLifeCount": ("DrmSetDiskDiagMonthLifeCount", "drm set disk diag month and life count"),
-    "DrmSmartTpSkipFeatureIdHook": ("DrmSmartTpSkipFeatureIdHook", "-u featureId :  Drm skip feature id process"),
+    "DrmSmartTpSkipFeatureIdHook": ("DrmSmartTpSkipFeatureIdHook", "-p featureId :  Drm skip feature id process"),
     "DrmSlowDiskDetectSkipUpdateDiskPerfTp": ("DrmSlowDiskDetectSkipUpdateDiskPerfTp", "drm slow disk skip update disk perf"),
     "DrmSlowDiskDetectGetIostatFailTp": ("DrmSlowDiskDetectGetIostatFailTp", "drm slow disk get disk iostat fail"),
     "DrmDprDiskInPrefail": ("DrmDprDiskInPrefail", "drm dpr fail for disk in"),
     "DhasTriggerIoerr": ("DhasTriggerIoerr", "Inject IO error event for DHA. Params: diskId,opcode,protocol,senseKey,senseCode"),
-    "DrmDprSetNvmeEntrysPrefail": ("DrmDprSetNvmeEntrysPrefail", "Set NVMe prefail by diskId. Params: diskId1,diskId2,... (optional)")
+    "DrmDprSetNvmeEntrysPrefail": ("DrmDprSetNvmeEntrysPrefail", "Set NVMe prefail by diskId. Params: diskId1,diskId2,..."),
+    "DrmDprDiskFailTp": ("DrmDprDiskFailTp", "DRM DPR disk fail injection. Use -p \"diskId1,diskId2,...\""),
+    "DrmSlowDiskDetectCreateDiskObjFailTp": ("DrmSlowDiskDetectCreateDiskObjFailTp", "DRM slow disk detect create disk object fail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetSataSsdSmartEntrysPrefail": ("DrmDprSetSataSsdSmartEntrysPrefail", "DRM DPR set SATA SSD SMART entries for prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetSataHddSmartEntrysPrefail": ("DrmDprSetSataHddSmartEntrysPrefail", "DRM DPR set SATA HDD SMART entries for prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetSasSsdEntrysPrefail": ("DrmDprSetSasSsdEntrysPrefail", "DRM DPR set SAS SSD entries for prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetNlSasHddEntrysPrefail": ("DrmDprSetNlSasHddEntrysPrefail", "DRM DPR set NL-SAS HDD entries for prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetSasHssdEntrysPrefail": ("DrmDprSetSasHssdEntrysPrefail", "DRM DPR set SAS HSSD entries for prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetSasHssdEntrysDiePrefail": ("DrmDprSetSasHssdEntrysDiePrefail", "DRM DPR set SAS HSSD DIE prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetNvmeEntrysDiePrefail": ("DrmDprSetNvmeEntrysDiePrefail", "DRM DPR set NVMe HSSD DIE prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetSasHssdEntrysUncPrefail": ("DrmDprSetSasHssdEntrysUncPrefail", "DRM DPR set SAS HSSD UNC prefail. Use -p \"diskId1,diskId2,...\""),
+    "DrmDprSetNvmeEntrysUncPrefail": ("DrmDprSetNvmeEntrysUncPrefail", "DRM DPR set NVMe HSSD UNC prefail. Use -p \"diskId1,diskId2,...\""),
+    "DebugSetDiskIoStats": ("DebugSetDiskIoStats", "Set disk IO stats for a specific cycle. Use -p \"diskId,iops,bw,svctm,util,busyNum\""),
 }
 
 
