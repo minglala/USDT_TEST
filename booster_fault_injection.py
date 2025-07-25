@@ -69,11 +69,8 @@ def print_help():
     for fn, (probe, description) in fn_table.items():
         print(f" - {fn:<35} ({description})")
 
-def main():
-    if len(sys.argv) < 2 or sys.argv[1] == "-h":
-        print_help()
-        sys.exit(0)
 
+def fetch_bpf_codes():
     # 从文件加载 BPF C 代码
     try:
         with open(BPF_SOURCE_FILE, 'r') as f:
@@ -81,7 +78,10 @@ def main():
     except FileNotFoundError:
         print(f"Error: BPF source file '{BPF_SOURCE_FILE}' not found.")
         sys.exit(1)
+    return bpf_src
 
+
+def fetch_params():
     # 重写参数解析逻辑以支持 -p
     try:
         procid = int(sys.argv[1])
@@ -123,6 +123,18 @@ def main():
         print_help()
         sys.exit(1)
 
+    return procid, enabled_fns, cflags
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] == "-h":
+        print_help()
+        sys.exit(0)
+
+    bpf_src = fetch_bpf_codes()
+
+    procid, enabled_fns, cflags = fetch_params()
+
     # set the USDT tracepoint and enable probes
     try:
         u = USDT(pid=procid)
@@ -142,30 +154,31 @@ def main():
     is_timeout_injection_enabled = ("CliReturnTimeOut30S" in enabled_fns or
                                     "CliReturnTimeOut90S" in enabled_fns)
 
-    if is_timeout_injection_enabled:
-        print("Timeout injection probe enabled. Monitoring process state...")
-        duration = 30 if "CliReturnTimeOut30S" in enabled_fns else 90
-        try:
-            while True:
-                with open(f"/proc/{procid}/stat") as f:
-                    state = f.read().split()[2]
-                if state == 'T': 
-                    print(f"Probe hit! Process {procid} is now STOPPED.")
-                    print(f"Sleeping here in the controller for {duration} seconds...")
-                    time.sleep(duration)
-                    print(f"Waking up process {procid} with SIGCONT.")
-                    os.kill(procid, signal.SIGCONT)
-                    print("Process resumed. Waiting for the next hit...")
-                time.sleep(0.1)
-        except (FileNotFoundError, KeyboardInterrupt) as e:
-            print(f"\nExiting... ({type(e).__name__})")
-            try:
-                os.kill(procid, signal.SIGCONT)
-            except ProcessLookupError:
-                pass
-    else:
+    if not is_timeout_injection_enabled:
         print("Start USDT tracing (standard mode)...")
         b.trace_print()
+        return
+
+    print("Timeout injection probe enabled. Monitoring process state...")
+    duration = 30 if "CliReturnTimeOut30S" in enabled_fns else 90
+    try:
+        while True:
+            with open(f"/proc/{procid}/stat") as f:
+                state = f.read().split()[2]
+            if state == 'T': 
+                print(f"Probe hit! Process {procid} is now STOPPED.")
+                print(f"Sleeping here in the controller for {duration} seconds...")
+                time.sleep(duration)
+                print(f"Waking up process {procid} with SIGCONT.")
+                os.kill(procid, signal.SIGCONT)
+                print("Process resumed. Waiting for the next hit...")
+            time.sleep(0.1)
+    except (FileNotFoundError, KeyboardInterrupt) as e:
+        print(f"\nExiting... ({type(e).__name__})")
+        try:
+            os.kill(procid, signal.SIGCONT)
+        except ProcessLookupError:
+            pass
 
 if __name__ == "__main__":
     main()
