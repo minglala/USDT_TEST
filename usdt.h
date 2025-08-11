@@ -51,7 +51,7 @@
 
 #define LVOS_END \
         } \
-    } while (0);
+    } while (0)
 
 #else /* Release Mode */
 
