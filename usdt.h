@@ -12,10 +12,13 @@
 #include <sys/sdt.h>
 
 /* DTrace 探针的底层封装宏 */
-#define BOOSTER_DTRACE_PROBE1(name, a1)                 DTRACE_PROBE1(BOOSTER, name, a1)
-#define BOOSTER_DTRACE_PROBE2(name, a1, a2)             DTRACE_PROBE2(BOOSTER, name, a1, a2)
-#define BOOSTER_DTRACE_PROBE3(name, a1, a2, a3)         DTRACE_PROBE3(BOOSTER, name, a1, a2, a3)
-#define BOOSTER_DTRACE_PROBE4(name, a1, a2, a3, a4)     DTRACE_PROBE4(BOOSTER, name, a1, a2, a3, a4)
+#define BOOSTER_DTRACE_PROBE1(name, a1) DTRACE_PROBE1(BOOSTER, name, a1)
+#define BOOSTER_DTRACE_PROBE2(name, a1, a2) DTRACE_PROBE2(BOOSTER, name, a1, a2)
+#define BOOSTER_DTRACE_PROBE3(name, a1, a2, a3) DTRACE_PROBE3(BOOSTER, name, a1, a2, a3)
+#define BOOSTER_DTRACE_PROBE4(name, a1, a2, a3, a4) DTRACE_PROBE4(BOOSTER, name, a1, a2, a3, a4)
+#define BOOSTER_DTRACE_PROBE5(name, a1, a2, a3, a4, a5) DTRACE_PROBE5(BOOSTER, name, a1, a2, a3, a4, a5)
+#define BOOSTER_DTRACE_PROBE6(name, a1, a2, a3, a4, a5, a6) DTRACE_PROBE6(BOOSTER, name, a1, a2, a3, a4, a5, a6)
+#define BOOSTER_DTRACE_PROBE7(name, a1, a2, a3, a4, a5, a6, a7) DTRACE_PROBE7(BOOSTER, name, a1, a2, a3, a4, a5, a6, a7)
 
 /**
  * @brief (全新设计) 故障注入代码块起始宏。
@@ -49,6 +52,24 @@
         BOOSTER_DTRACE_PROBE4(name, arg1, arg2, arg3, &__lvos_skip_flag); \
         if (!__lvos_skip_flag) {
 
+#define LVOS_START_DTRACE4(name, arg1, arg2, arg3, arg4)                        \
+    do {                                                                        \
+        volatile int __lvos_skip_flag = 0;                                      \
+        BOOSTER_DTRACE_PROBE5(name, arg1, arg2, arg3, arg4, &__lvos_skip_flag); \
+        if (!__lvos_skip_flag) {
+
+#define LVOS_START_DTRACE5(name, arg1, arg2, arg3, arg4, arg5)                        \
+    do {                                                                              \
+        volatile int __lvos_skip_flag = 0;                                            \
+        BOOSTER_DTRACE_PROBE6(name, arg1, arg2, arg3, arg4, arg5, &__lvos_skip_flag); \
+        if (!__lvos_skip_flag) {
+
+#define LVOS_START_DTRACE6(name, arg1, arg2, arg3, arg4, arg5, arg6)                        \
+    do {                                                                                    \
+        volatile int __lvos_skip_flag = 0;                                                  \
+        BOOSTER_DTRACE_PROBE7(name, arg1, arg2, arg3, arg4, arg5, arg6, &__lvos_skip_flag); \
+        if (!__lvos_skip_flag) {
+
 #define LVOS_END \
         } \
     } while (0)
@@ -60,9 +81,15 @@
 #define BOOSTER_DTRACE_PROBE2(...)                      ((void)0)
 #define BOOSTER_DTRACE_PROBE3(...)                      ((void)0)
 #define BOOSTER_DTRACE_PROBE4(...)                      ((void)0)
+#define BOOSTER_DTRACE_PROBE5(...)                      ((void)0)
+#define BOOSTER_DTRACE_PROBE6(...)                      ((void)0)
+#define BOOSTER_DTRACE_PROBE7(...)                      ((void)0)
 #define LVOS_START_DTRACE1(name, ...)                   if (1) {
 #define LVOS_START_DTRACE2(name, ...)                   if (1) {
 #define LVOS_START_DTRACE3(name, ...)                   if (1) {
+#define LVOS_START_DTRACE4(name, ...)                   if (1) {
+#define LVOS_START_DTRACE5(name, ...)                   if (1) {
+#define LVOS_START_DTRACE6(name, ...)                   if (1) {
 #define LVOS_END                                        }
 
 #endif /* defined(_DEBUG) */
