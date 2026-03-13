@@ -53,6 +53,8 @@ fn_table = {
     "DrmDprSetSasHssdEntrysPrefail": ("DrmDprSetSasHssdEntrysPrefail", \
             "DRM DPR set SAS HSSD entries for prefail. Use -p \"diskId1,diskId2,...\""),
     "DcaGetSataHddDhaInfo": ("DcaGetSataHddDhaInfo", "dca get sata hdd dha info"),
+    "DcaGetSasHddDhaInfoTp": ("DcaGetSasHddDhaInfoTp", "dca get sas hdd dha info fail"),
+    "DhasUpdateRawDateRERTp": ("DhasUpdateRawDateRERTp", "dhas update raw data RER fail"),
     "DmgGetDhaInfoFail": ("DmgGetDhaInfoFail", "data mgr get dha info failed"),
     "DrmDprDiskInPrefail": ("DrmDprDiskInPrefail", "drm dpr fail for disk in"),
     "DrmDprDiskFailTp": ("DrmDprDiskFailTp", "DRM DPR disk fail injection. Use -p \"diskId1,diskId2,...\""),
@@ -74,6 +76,7 @@ fn_table = {
             "Set disk IO stats for a specific cycle. Use -p \"diskId,iops,bw,svctm,util,busyNum\""),
     "CliXmlModuleError": ("CliXmlModuleError", "xml Error"),
     "DcakSecureCError": ("DcakSecureCError", "secure C error"),
+    "DmgRefreshDiskListFail": ("DmgRefreshDiskListFail", "data mgr refresh disk info failed"),
 }
 
 
@@ -93,6 +96,24 @@ def fetch_bpf_codes():
         print(f"Error: BPF source file '{BPF_SOURCE_FILE}' not found.")
         sys.exit(1)
     return bpf_src
+
+
+def convert_to_decimal_string(s: str) -> str:
+    s = s.strip()
+    # 如果是设备路径或以 / 开头，直接返回原串
+    if not s or s.startswith('/'):
+        return s
+
+    out = []
+    for tok in s.split(','):
+        t = tok.strip()
+        if not t:
+            continue
+        if t.lower().startswith('0x'):
+            out.append(str(int(t, 16)))
+        else:
+            out.append(str(int(t)))
+    return ','.join(out)
 
 
 def fetch_params():
@@ -120,11 +141,14 @@ def fetch_params():
         # 检查下一个参数是否是 -p
         if i + 2 < len(args) and args[i+1] == '-p':
             param = args[i+2]
-            enabled_fns[fn_name] = param
+            devimal_param = convert_to_decimal_string(param)
+            enabled_fns[fn_name] = devimal_param
             # 为该函数动态构建一个 C 编译器宏定义
             # 例如：-DPARAMS_DcaGetPohFail="/dev/nvme0n1"
             # 注意参数值需要用引号包围，以成为 C 语言中的字符串
-            cflag = f'-DPARAMS_{fn_name}="{param}"'
+            cflag = f'-DPARAMS_{fn_name}="{devimal_param}"'
+            print("Params before conversion: " + param)
+            print("Params after conversion: " + devimal_param)
             cflags.append(cflag)
             print(f"Found parameter for {fn_name}: {param}. Adding cflag: {cflag}")
             i += 3 # 跳过 fn_name, -p, 和 param
